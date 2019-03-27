@@ -1,0 +1,337 @@
+---
+title: "Resampling Methods"
+output: 
+  html_document:
+    toc: false
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,message = FALSE,warning = FALSE)
+```
+
+## Resampling {.tabset}
+
+### Resampling Overview {.tabset}
+
+</br>
+
+This materil provides a brief overview. Two other good references for material on this subject are [here](https://onlinecourses.science.psu.edu/stat464/node/35){target="blank"} and [here](http://thomasleeper.com/Rcourse/Tutorials/permutationtests.html){target="blank"}
+
+Much of what I built was based on [Tim Hesterberg's paper](Hesterberg_bootstrap.pdf).  [Here](resampling_class.html) is a short class activity that I built.
+
+Resampling can be broken into to parts.  The `sampling` portion and the `re` portion.  
+
+**Sampling**
+
+Remember, we have collected a random sample from our population through the process of `sampling`. `Sampling` is simply the process of selecting samples that are contained in our sample.  Often, we leave out the word random when we discuss sampling in statistics, but it is generally implied.   
+
+**re**
+
+We all understand what `re` means.  However, in our word `resampling` the `re` could be confused with a repeated sample from the population.  We are not repeating a sampling process from the population.  We are going to `resample` our sample.  Like the word "reuse", it doesn't mean go get a new one.  We figure out a way to leverage and reuse what we already have.
+
+**Resampling**
+
+The process of reusing our current sample in a manner that allows us to make inference to the original population from which the sample was derived.  All of these methods don't require parametric assumptions.
+
+</br>
+</br>
+
+#### Resampling Methods
+
+In statistics, resampling is any of a variety of methods for doing bootstrapping, jackknifing or permutation tests.[^1]
+
+* **Bootstrapping:** Drawing randomly, with replacement, from a set of data points to confidently estimate a statistic of interest (e.g mean, median, slope) by first estimating the full sampling distribution.
+</br>
+* **Jackknifing:** Gives similar results to the bootstrap method.  However, It is not used as much in modern statistics. Systematically leaving "m" points out of your data and estimating your parameter of interest.  The average of these estimates would be your point estimate.  This process can then give you the bias and variance of your estimator. 
+</br>
+* **Permutation Tests:** Exchanging labels on data points when performing significance tests (also called exact tests, randomization tests, or re-randomization tests).
+
+These methods have gained popularity with the rise of fast processing power in computers. In fact the general idea of each of the above methods is explained quite well on [Wikipedia](https://en.wikipedia.org/wiki/Resampling_(statistics)){target="blank"}.  We will dive further into permutation tests and bootstrapping.  We will also leverage heavily from this article, ["What Teachers Should Know about the Bootstrap: Resampling in the Undergraduate Statistics Curriculum"](https://arxiv.org/pdf/1411.5279.pdf){target="blank"}
+<!-- http://www.lock5stat.com/StatKey/ -->
+<!-- https://www.zoology.ubc.ca/~schluter/R/resample/ -->
+
+Now is probably the best time to correct a glaring issue taught to you in your introductory statistics class about the Central Limit Theorem (CLT). The CLT can require a very large sample size (e.g. hundreds to thousands) and for many skewed or heavy-tailed distributions, a sample of 30 observations does not work to invoke a normally distributed sampling distribution. Remember, t-tests assume normal populations and are quite sensitive to skewness (unless the two sample sizes are nearly equal). Permutation tests and bootstrap methods make no distributional assumptions and don't care about biased statistics. 
+
+#### The Bootstrap
+
+The bootstrap is based on the **plug-in principle** if something is unknown, then substitute an estimate for it. This principle is very familiar to statisticians. For example, the standard error for the sample mean is $\sigma/\sqrt{n}$; when $\sigma$ is unknown we substitute an estimate $s$, the sample standard deviation. With the bootstrap we take this one step farther -- instead of plugging in an estimate for a single parameter, we plug in an estimate for the whole distribution.[^2]
+
+Some people are suspicious of the bootstrap because they think the bootstrap creates data out of nothing. (The name "bootstrap" doesn't help, since it implies creating something out of nothing.) The bootstrap doesn't create all those bootstrap samples and use them as if they were more real data; instead, it uses them to tell how accurate the original estimate is.
+
+In this regard it is no different than formula methods that use the data twice -- once to compute an estimate, and again to compute a standard error for the estimate. The bootstrap just uses a different approach to estimating the standard error.[^4]
+
+**But, how do we plug in an estimate for the whole distribution?**
+
+We assume that the collected sample is representative of the population (which is the assumption made with all other statistical tests).  Instead of calculating summary statistics and performing tests under parametric models (like the normal or t), we resample the sample and use the resamples to create the distribution of our statistic of interest.  In general, we are trying to find confidence intervals for our parameter of interest.  We will discuss the following options.
+
+* **Percentile Method:** The simplest bootstrap procedure consists of drawing samples from the empirical
+distribution (e.g. means) with probability $1/n$ on each observation. In other words drawing samples with replacement from the data. For a 95% confidence interval, the 2.5th and 97.5th percentiles are used for the lower and upper bounds.
+
+* **Bootstrap T Method:** This method creates a distribution of $t_{bs}$.  That is we use bootstrapping to get the distribution of our t-values for our respective population estimate.  If we were interested in the mean we could use
+
+* **BCa Method:** The BCa confidence interval endpoints are percentiles of the bootstrap distribution that are adjusted to correct for bias and skewness in the distribution.  This is the best method and should be used if there is skewness in the boostrap distribution.  This method is more complicated to code.  We will just use the methods in `library(resample)`.
+
+$$
+t_{bs} = \frac{\bar{x}_{bs}-\bar{x}_{sample}}{SE_{bs}}
+$$
+
+##### Bootstrap T Method 
+
+1. Sample (w/replacement) $n$ from the sample.
+
+2. Calculate the standard error of the parameter of interest, where the $bs$ identifies calculated values from the bootstrap sample.
+
+$$SE_{bs} = \frac{S_{bs}}{\sqrt{n}}$$
+
+3. Calculate $t_{bs}$ value, where the $bs$ identifies calculated values from the bootstrap sample.
+
+$$t_{bs} = \frac{\bar{x}_{bs} - \bar{x}_{sample}}{SE_{bs}}$$
+
+4. Repeat steps 1-3 10,000 times (could be less if needed)
+5. Find the $2.5^{th}$ and $97.5^{th}$ for a two-sided interval. 
+6. Calculate the the estimator of interest from the original sample -- $\bar{x}$.
+7. Calculate the standard error of the estimator. Note that in some cases an additional bootstrap process may be needed at this step to get our standard error estimate.
+
+$$SE_{sample} = \frac{S_{sample}}{\sqrt{n}}$$
+
+8. Then calculate $\bar{x}_{sample} - SE_{sample}\times t_{bs\space ,\space 0.975}$ for the lower bound and $\bar{x}_{sample} - SE_{sample}\times t_{bs\space ,\space 0.025}$ for the upper bound. Note that the $t_{bs}$ values are flipped and each margin of error is subtracted. 
+
+#### Permutation Tests
+
+**Permutation and t-tests** 
+
+Permutation tests are accurate. **In fact, t-tests are a computationally feasible approximation to permutation tests, given the computers of the time (1920's young women).** With modern computing, we should not restrict ourselves so heavily.[^5]
+
+
+
+### R Functions
+
+</br>
+
+
+There are two packages in **R** that are pretty comprehensive in their tools for permutation tests and bootstrap estimation -- `library(coin)` and `library(boot)`.  For what we will introduce we will leverage [Tim Hesterberg's](http://www.timhesterberg.net/r-packages){target="blank"} `library(resample)` package and a few base functions in R.
+
+Generally, we can do resampling techniques using the following list of functions.
+
+* [sample()](https://www.rdocumentation.org/packages/base/versions/3.3.2/topics/sample){target="blank"}: Provides functionality to take a random sample from data.
+* [replicate()](https://www.rdocumentation.org/packages/base/versions/3.3.2/topics/lapply){target="blank"}: Is used for repeated evaluation of an expression (which usually involves random number generation).
+* [quantile()](https://www.rdocumentation.org/packages/stats/versions/3.3.2/topics/quantile){target="blank"}: Produces sample quantiles for of a vector `x` for the specified `probs`.
+* [for loops](https://www.rdocumentation.org/packages/base/versions/3.3.2/topics/Control){target="blank"}:  Provides the functionality to iterate function or process through a sequence.
+
+If we use the [resample](https://www.rdocumentation.org/packages/resample/versions/0.4){target="blank"} package then we can use the functions that are much like `t.test`. As we are just introducing resampling techniques, we will avoid teaching more complicated options [like this one](https://sammancuso.com/2015/05/18/bootstrapped-anova-and-ancova-in-r/){target="blank"}.
+
+```{r,eval=FALSE}
+install.packages("resample")
+library(resample)
+```
+
+* [bootstrap()](https://www.rdocumentation.org/packages/resample/versions/0.4/topics/bootstrap){target="blank"}
+* [bootstrap2()](https://www.rdocumentation.org/packages/resample/versions/0.4/topics/bootstrap){target="blank"}
+* [permutationTest()](https://www.rdocumentation.org/packages/resample/versions/0.4/topics/bootstrap){target="blank"}
+* [permutationTest2()](https://www.rdocumentation.org/packages/resample/versions/0.4/topics/bootstrap){target="blank"}
+
+
+### Example Analyses {.tabset}
+
+</br>
+
+
+#### Is Verizon Cheating?
+
+Tim Hesterberg consulted on a case before the New York Public Utilities Commission (PUC).  Verizon was the main phone line steward, called an ILEC, and had the responsibility to repair its lines as fast as it repaired the lines for customers of other long distance providers, called CLECs.  The utility commission had a policy of comparing Verizon line repair times to the other repair time on the other long distance provider's lines in each competitive area using t-tests with an $\alpha=0.01$.  Verizon did not like this arrangement and proposed using permutation tests instead.  
+
+The code chunk below loads a couple of libraries and the `Verizon` data from the `library(resample)` package. The second code chunk creates the table and histograms of the two groups.
+
+```{r}
+library(resample)
+library(ggpubr)
+library(resample)
+library(pander)
+data("Verizon")
+Verizon$Group <-  factor(as.character(Verizon$Group),
+                       levels=c("ILEC","CLEC"),
+                       labels=c("Verizon ILEC","Comp. CLEC"))
+CLEC <- with(Verizon, Time[Group == "Comp. CLEC"])
+ILEC <- with(Verizon, Time[Group == "Verizon ILEC"])
+```
+
+```{r,fig.width=8}
+
+pander(table(Verizon$Group))
+
+qplot(data=Verizon,x=Time)+
+  facet_wrap(~Group,scales="free")+
+  theme_bw()
+
+```
+
+From the histograms above, we note that the underlying populations are heavily right skewed and that the respective sample size in each group is very different.  The QQ-plot below demonstrates the lack of normality as well. We could argue that 23 samples is "large" and that we can use the CLT. If we had incorrectly assumed equal variance our p-value would have been $0.03$.  So, we may decide that the p-value of the Welch (unequal variance) t-test would be more appropriate with a value of $0.005$.  Using this p-value we would conclude that Verizon is not treating both groups the same. 
+
+```{r}
+ggqqplot(data=Verizon,x="Time",color="Group")
+pander(t.test(CLEC,ILEC,alternative="greater",var.equal = TRUE))
+pander(t.test(CLEC,ILEC,alternative="greater"))
+```
+
+Remember, **t-tests were a computationally feasible approximation to permutation tests, given the computers at that time (1920's young women).** With modern computing, we should avoid approximations and use permutation methods to get the most correct answer.
+
+The output below results in a p-value of $0.018$. Thus we conclude that there is no statistically significant difference and that Verizon is meeting their obligations.
+
+```{r}
+perm.pvalue.mean = permutationTest2(CLEC,data2=ILEC,mean,alternative="greater")
+pander(perm.pvalue.mean$stats)
+```
+
+However, if we think more about an appropriate measure of center for this data it may be more appropriate to compare the medians of the two populations.  This wasn't technically possible with our non-parametric methods or the t-test.  Permutation tests have no such restriction.  When the method is performed for the medians it looks like Verizon may be treating their clients better. 
+
+```{r}
+perm.pvalue.median = permutationTest2(CLEC,data2=ILEC,median,alternative="greater")
+pander(perm.pvalue.median$stats)
+
+```
+
+We could also calculate bootstrap confidence intervals of the differences as well.
+
+```{r}
+vmean = bootstrap2(CLEC,data2=ILEC,mean)
+vmedian = bootstrap2(CLEC,data2=ILEC,median)
+CI.percentile(vmean,probs=c(.005,.995),expand=TRUE)
+CI.percentile(vmean,probs=c(.005,.995),expand=FALSE)
+
+CI.percentile(vmedian,probs=c(.005,.995),expand=TRUE)
+
+
+```
+
+Notice that the p-value and the confidence intervals are not in the same context as the p-value was one-sided.  Tim notes an important fact about comparing permutation tests to the bootstrap process.
+
+> We could perform a permutation test by pooling the data, then drawing bootstrap samples of size $n_1$
+and $n_2$ with replacement from the pooled data. This sampling would be consistent with the null hypothesis. It is not as accurate as the permutation test. Suppose, for example, that the data contain three outliers. The permutation test tells how common the observed statistic is, given that there is a total of three outliers. With a pooled bootstrap the number of outliers would vary, and the P-value would
+not as accurately reflect the data we have.[^7]
+
+He also make makes another point about boostrapping on the medians.
+
+> Recall that the median is the mean of the 1 or 2 middle observations. The trimmed mean often does a better job of representing the average of typical observations than does the median. Bootstrapping trimmed means also works better than bootstrapping medians, because the bootstrap doesn't work well for statistics that depend on only 1 or 2 observations.
+
+
+
+#### The Speed of Light
+
+At the time Simon Newcomb and the world did not know the speed of light. While the currently accepted value for the speed of light on this scale is now known[^8], we will imagine that we are using this data to estimate the speed of light.
+
+The data are recorded as deviations from 24,80024,800 nanoseconds. This data was collected by Simon Newcomb in 1880s. The 66 measurements are listed;
+
+28, 26, 33, 24, 34, -44, 27, 16, 40, -2, 29, 22, 24, 21, 25, 30, 23, 29, 31, 19, 24, 20, 36, 32, 36, 28, 25, 21, 28, 29, 37, 25, 28, 26, 30, 32, 36, 26, 30, 22, 36, 23, 27, 27, 28, 27, 31, 27, 26, 33, 26, 32, 32, 24, 39, 28, 24, 25, 32, 25, 29, 27, 28, 29, 16, 23.
+
+```{r}
+light = c(28,26,33,24,34,-44, 27, 16, 40, -2,
+29,22,24,21,25,30 ,23 ,29 ,31 ,19,
+24,20,36,32,36,28 ,25 ,21 ,28 ,29,
+37,25,28,26,30,32 ,36 ,26 ,30 ,22,
+36,23,27,27,28,27 ,31 ,27 ,26 ,33,
+26,32,32,24,39,28 ,24 ,25 ,32 ,25,
+29,27,28,29,16,23)
+```
+
+A histogram of the observations shows a left-skewed distribution with two observations driving most of the skew. The remaining data is fairly symmetric and bell shaped. Due to the strong left skewed pattern shown in the histogram and the poor performance in the normal QQ plot below, these data fail the necessary normality assumptions. We do not recommend using standard t-test procedures to calculate a confidence interval for the mean.
+
+
+```{r,fig.width=8}
+qplot(x=light,bins=35,colour=I("white"))+theme_bw()
+ggqqplot(light)
+
+```
+
+We could leverage the Wilcoxon non-parametric method. The Wilcoxon Signed-Rank test is appropriate for any distribution of data, and especially for small sample sizes. While the median is a more robust measure of center when extreme observations are present, we may want to use the mean.  Until this unit, we did not have a proper method to calculate an appropriate confidence interval on the mean.
+
+##### Comparing the t-interval to the boostrap interval
+
+
+```{r}
+out.t = t.test(x=light,conf.int = TRUE,conf.level = .99)
+out.b.mean = bootstrap(light,mean)
+```
+
+We would be hard pressed to argue the use of a standard t-distribution confidence interval based on the previous two plots.  However, we can use the bootstrap method to calculate an appropriate $99%$ confidence interval.  The t-based interval would result in **`r pander(out.t$conf.int)`**.  Whereas the bootstrap method would result in the interval shown in the table below.
+
+```{r}
+pander(CI.percentile(out.b.mean,c(.005,.995)))
+```
+
+This histogram shows the bootstrap sampling distribution of the mean. Notice its shape.
+
+```{r,fig.width=8}
+hist(out.b.mean)
+
+```
+
+**Coding our own bootstrap**
+
+We have been using the `library(resample)` package, but the base code to do bootstrapping is not too difficult.  The next code chunk and table will reproduce results that are similar to the `bootstrap()` function (which we have reproduced in the next table). Notice that the code below does not incorporate expanded percentile adjustment.
+
+```{r}
+npboot = replicate(10000,mean(sample(light,length(light),replace=T)))
+pander(quantile(npboot,c(.005,.995)))
+pander(CI.percentile(out.b.mean,c(.005,.995)),expand=FALSE)
+```
+
+We have walked through a multiple ways to confidently bound our mean.  The code below provides the best method for this.  This is called the **Bootstrap T Method**.  Notice how the confidence interval is of the form
+
+$$
+(\bar{x} - q_{1-\alpha/2}\times S_\bar{x} \space, \space \bar{x} - q_{\alpha/2}\times S_\bar{x})
+$$
+which uses the upper quantile for the lower endpoint and the lower quantile for the upper endpoint.
+
+Tim Hesterberg says,
+
+> The bootstrap t doesn't pretend t statistics do not have t distributions when populations are skewed.
+Bootstrap t confidence intervals and tests use a t statistic, but estimate its actual distribution by bootstrapping instead of pretending that it has a t distribution. They have pedagogical value and are second-order accurate. [^9]
+
+
+
+```{r,fig.width=8}
+tboot = replicate(10000,{
+  nn=length(light)
+  bootsample = sample(light,nn,replace=T)
+  (mean(bootsample) - mean(light))/(sd(bootsample)/sqrt(nn))
+})
+
+selight = sd(light)/sqrt(length(light))
+
+c("lower"=mean(light)-quantile(tboot,.995)*selight,
+  "upper"=mean(light)-quantile(tboot,.005)*selight)
+
+qplot(x=tboot,colour=I("white"))+theme_bw()
+
+```
+
+
+
+
+
+#####  Comparing Wilcox Test to the Boostrap
+
+Notice that the confidence intervals match for the median calculations.
+
+```{r}
+out.w = wilcox.test(x=light,conf.int = TRUE,conf.level = .99)
+pander(out.w$conf.int)
+out.b.median = bootstrap(light,median)
+CI.percentile(out.b.median,c(.005,.995))
+
+```
+
+
+
+
+
+[^1]: https://en.wikipedia.org/wiki/Resampling_(statistics)
+[^2]: See page 15 of Hesterberg
+[^3]: See page 18 of Hesterberg
+[^4]: See page 18 and 19 of Hesterberg
+[^5]: See page 39 for actual text. I adapted it.
+[^6]: See page 51 box
+[^7]: See page 41
+[^8]: https://projecteuclid.org/download/pdf_1/euclid.aos/1176343997
+[^9]: See page 58

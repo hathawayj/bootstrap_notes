@@ -1,0 +1,320 @@
+---
+title: "I am a Resampler"
+output: 
+  html_document:
+    toc: true
+    toc_float: true
+    code_folding: hide
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE,message=FALSE,warning=FALSE)
+```
+
+```{r libraries}
+library(ggplot2)
+```
+
+### Getting Started
+
+Before we push too hard on this topic, lets review some r functions that we will need for doing this work. Let's read under [Resampling Functions](index.html)
+
+To push us on the idea behind resampling techniques let's simulate data from a known population. Let's try the normal distribution with $\mu=4$ and $sd=8$.
+
+* Here is what the normal distribution would look like.
+
+```{r normal1}
+rnormal = rnorm(4500,4,8)
+
+# Good depiction of the true distribution
+qplot(x=rnormal,colour=I("white"),bins=60)+
+  geom_vline(xintercept=mean(rnormal),size=2)+geom_vline(xintercept=mean(rnormal),colour="white")+
+  theme_bw()
+
+```
+
+
+* Now we are going to take a sample of $n=50$.
+
+```{r normalsample}
+rnormal.sample = rnorm(50,4,8)
+qplot(x=rnormal.sample,colour=I("white"),bins=30)+
+  geom_vline(xintercept=mean(rnormal.sample),size=2)+
+  geom_vline(xintercept=mean(rnormal.sample),colour="white")+
+  theme_bw()
+```
+
+* So we can get our confidence interval on the sampling distribution of means based on 50 observations using the `t.test()` function.
+
+```{r normalt}
+tresults.norm = t.test(rnormal.sample,conf.int=TRUE,mu=4)
+tresults.norm$conf.int
+```
+
+* Discuss with your table what the the following plot represents?
+
+```{r samplingnormal}
+
+rnormal.distribution = replicate(2000,mean(rnorm(50,4,8)))
+qplot(x=rnormal.distribution,colour=I("white"))+
+ geom_vline(xintercept=mean(rnormal.distribution),size=2)+
+ geom_vline(xintercept=mean(rnormal.distribution),colour="white")+
+ theme_bw()
+
+```
+
+
+###  The Bootstrap Idea
+
+**Now we can introduce the bootstrap concept.**
+
+* Take some time with your table to explain what the next two lines of code are doing.
+* How is the below plot similar to the previous plot?
+
+```{r}
+bsvalue.norm = replicate(2000,mean(sample(rnormal.sample,50,replace=TRUE)))
+quantile(bsvalue.norm,c(.025,.975))
+
+qplot(x=bsvalue.norm,colour=I("white"))+
+  geom_vline(xintercept=mean(bsvalue.norm),size=2)+
+  geom_vline(xintercept=mean(bsvalue.norm),colour="white")+
+  theme_bw()
+
+```
+
+
+The above code chunk is called the bootstrap percentile interval.  In the code chunk below we exemplify the bootstrap t interval.
+
+* Work with your table to write down in "pseudo code" on the board what the below code chunk is doing.
+* Discuss with your table what differences you see in the below code compared to the above percentile interval.
+
+```{r}
+
+
+bsvalue.t.norm = replicate(20000,{
+  
+  bsample = sample(rnormal.sample,50,replace=TRUE)
+  bmean = mean(bsample)
+  smean = mean(rnormal.sample)
+  bse = sd(bsample)/sqrt(50)
+  (bmean - smean)/bse
+  
+})
+
+c("lower"=mean(rnormal.sample)-quantile(bsvalue.t.norm,.975),"upper"=mean(rnormal.sample)-quantile(bsvalue.t.norm,.025))
+
+```
+
+OK.  Now we have three different confidence interval methods.  Let's compare them to the known true confidence interval.
+
+$$
+\bar{x} \pm t_{1-\alpha/2} \times \frac{\sigma}{\sqrt{50}}
+$$
+* Notice that they are all slightly different.  Let's discuss why this is so.
+
+
+```{r}
+as.numeric(tresults.norm$conf.int)
+quantile(bsvalue.norm,c(.025,.975))
+c("lower"=mean(rnormal.sample)-quantile(bsvalue.t.norm,.975),"upper"=mean(rnormal.sample)-quantile(bsvalue.t.norm,.025))
+mean(rnormal.sample)-qt(.975,49)*8/sqrt(50);mean(rnormal.sample)+qt(.975,49)*8/sqrt(50)
+
+```
+
+For the next part we need to introduce the concept of `coverage`.  Simply stated, it is the number of times our convidence interval encompasses the true mean.  If we designed a 95% confidence interval we would like the interval to "cover" the mean 95% of the time.
+
+```{r,eval=FALSE}
+
+normcov = replicate(200,{
+  # sample
+  rnormal.sample = rnorm(50,4,8)
+  
+  #Normal t
+  tresults.norm = t.test(rnormal.sample,conf.int=TRUE,mu=4)
+  nt = as.numeric(tresults.norm$conf.int)
+
+
+  
+  # bootstrap percentile
+  bsvalue.norm = replicate(2000,mean(sample(rnormal.sample,50,replace=TRUE)))
+  bsp = quantile(bsvalue.norm,c(.025,.975))
+
+  # bootstrap t
+  bsvalue.t.norm = replicate(20000,{
+  
+  bsample = sample(rnormal.sample,50,replace=TRUE)
+  bmean = mean(bsample)
+  smean = mean(rnormal.sample)
+  bse = sd(bsample)/sqrt(50)
+  (bmean - smean)/bse
+  })
+  bst = c("lower"=mean(rnormal.sample)-quantile(bsvalue.t.norm,.975),"upper"=mean(rnormal.sample)-quantile(bsvalue.t.norm,.025))
+  
+  nt.contained = nt[1]<4 & nt[2]>4 
+  bst.contained = bst[1]<4 & bst[2]>4
+  bsp.contained = bsp[1]<4 & bst[2]>4
+  
+  data.frame(nt=nt.contained,bst=bst.contained,bsp=bsp.contained)
+  
+},simplify=F)
+
+
+apply(do.call("rbind",normcov),2,mean)
+#    nt   bst   bsp 
+# 0.960 0.935 0.940 
+# sampling error is 0.015.  
+
+```
+
+
+### The Boostrap Purpose
+
+The above process gave us comparable results.  However, why would we go through the process of all the simulations to get the same results a simple t calculation could give us?
+
+The following example exemplifies why the bootstrap is so powerful.  Look at the following distribution that is heavily right skewed.  It is what we would also describe as a heavy-tailed distribution.
+
+```{r}
+#install.packages("rmutil")
+library(rmutil)
+library(resample)
+dispersion = 2.5
+
+rskewed = rpareto(4500,4,dispersion)
+
+# Good depiction of the true distribution
+qplot(x=rskewed,colour=I("white"),bins=60)+
+  scale_x_continuous(trans="sqrt",breaks=c(2,5,10,15,25,40,60,80,100,120,140,160,180),limits=c(0,200))+
+  scale_y_continuous(trans="sqrt",breaks=c(5,15,50,75,125,250,500,750))+
+  geom_vline(xintercept=mean(rskewed),size=2)+geom_vline(xintercept=mean(rskewed),colour="white")+
+  theme_bw()
+```
+
+* Before running the plots, look at the first few lines of code and discuss with your group what the sampling distribution of each line of code might look like.
+* Now make the plots with the additional lines of code in this chunk.
+* What do you think about using the t-interval based on normality?
+
+```{r, eval=FALSE}
+#install.packages("rmutil")
+library(rmutil)
+rskewed.distribution = replicate(10000,mean(rpareto(50,4,dispersion)))
+rskewed.distribution.500 = replicate(2000,mean(rpareto(5000,4,dispersion)))
+
+
+qplot(x=rskewed.distribution,colour=I("white"))+
+  scale_x_continuous(trans="sqrt",breaks=c(2,5,10,15,25,40,60,80,100,120,140,160,180),limits=c(0,25))+
+  scale_y_continuous(trans="sqrt",breaks=c(5,15,50,75,125,250,500,750))+
+  geom_vline(xintercept=mean(rskewed.distribution),size=2)+geom_vline(xintercept=mean(rskewed.distribution),colour="white")+
+  theme_bw()
+
+# what do you notice about our sampling distribution?
+
+# Well what if we have 5000 observation to calculate our mean. Surely the CLT must kick in.
+
+qplot(x=rskewed.distribution.500,colour=I("white"))+
+  scale_x_continuous(trans="sqrt",breaks=c(2,5,10,15,25,40,60,80,100,120,140,160,180),limits=c(3,5))+
+  scale_y_continuous(trans="sqrt",breaks=c(5,15,50,75,125,250,500,750))+
+  geom_vline(xintercept=mean(rskewed.distribution.500),size=2)+geom_vline(xintercept=mean(rskewed.distribution.500),colour="white")+
+  theme_bw()
+
+```
+
+
+
+```{r,eval=FALSE}
+rskewed.sample = rpareto(50,4,dispersion)
+
+qplot(x=rskewed.sample,colour=I("white"),bins=60)+
+  scale_x_continuous(trans="sqrt",breaks=c(2,5,10,15,25,40,60,80,100,120,140,160,180),limits=c(0,200))+
+  scale_y_continuous(trans="sqrt",breaks=c(5,15,50,75,125,250,500,750))+
+  geom_vline(xintercept=mean(rskewed.sample),size=2)+geom_vline(xintercept=mean(rskewed.sample),colour="white")+
+  theme_bw()
+
+## Now if we use our nieve interpretation of the CLT then 50 should kick in the normal distribution. Thus we can get a 95% confidence interval using the t.
+## 
+
+tresults = t.test(rskewed.sample,conf.int=TRUE,mu=4)
+
+# The bootstrap runs
+se = function(x) sd(x)/sqrt(length(x))
+bsvalue = bootstrap(rskewed.sample,c(mean=mean(rskewed.sample),se(rskewed.sample)))
+
+
+# The percentile bootstrap method.
+
+qplot(data=data.frame(bsvalue$replicates),x=mean,colour=I("white"))+
+  scale_x_continuous(trans="sqrt",breaks=c(2,5,10,15,25,40,60,80,100,120,140,160,180),limits=c(0,25))+
+  scale_y_continuous(trans="sqrt",breaks=c(5,15,50,75,125,250,500,750))+
+  geom_vline(aes(xintercept=mean(mean)),size=2)+geom_vline(aes(xintercept=mean(mean)),colour="white")+
+  theme_bw()
+
+
+# Once again we can compare our results. However, this time we will use the resampling package.
+CI.percentile(bsvalue,expand=FALSE)
+CI.percentile(bsvalue,expand=TRUE)
+CI.bootstrapT(bsvalue)
+CI.bca(bsvalue)
+as.numeric(tresults$conf.int)
+
+
+
+```
+
+Let's check out coverage with this heavy-tailed data.
+
+
+```{r,eval=FALSE}
+library(rmutil)
+
+skewcov = replicate(2000,{
+  # sample
+  rskewed.sample = rpareto(50,4,2.5)
+
+  #Normal t
+  tresults.norm = t.test(rskewed.sample,conf.int=TRUE,mu=4)
+  nt = as.numeric(tresults.norm$conf.int)
+
+
+  
+  # bootstrap percentile
+  bsvalue.norm = replicate(2000,mean(sample(rskewed.sample,50,replace=TRUE)))
+  bsp = quantile(bsvalue.norm,c(.025,.975))
+
+  # bootstrap t
+  bsvalue.t.norm = replicate(20000,{
+  
+  bsample = sample(rskewed.sample,50,replace=TRUE)
+  bmean = mean(bsample)
+  smean = mean(rskewed.sample)
+  bse = sd(bsample)/sqrt(50)
+  (bmean - smean)/bse
+  })
+  se = function(x) sd(x)/sqrt(length(x))
+  bst = c("lower"=mean(rskewed.sample)-quantile(bsvalue.t.norm,.975)*se(rskewed.sample),"upper"=mean(rskewed.sample)-quantile(bsvalue.t.norm,.025)*se(rskewed.sample))
+  
+
+  bsvalue = bootstrap(rskewed.sample,c(mean=mean(rskewed.sample),se(rskewed.sample)))
+  rpf=CI.percentile(bsvalue,expand=FALSE)[1,]
+  rpt=CI.percentile(bsvalue,expand=TRUE)[1,]
+  rbt=CI.bootstrapT(bsvalue)[1,]
+  
+  nt.contained = nt[1]<4 & nt[2]>4 
+  bst.contained = bst[1]<4 & bst[2]>4
+  bsp.contained = bsp[1]<4 & bsp[2]>4
+  rpf.contained = rpf[1]<4 & rpf[2]>4
+  rpt.contained = rpt[1]<4 & rpt[2]>4
+  rbt.contained = rbt[1]<4 & rbt[2]>4
+  
+  data.frame(nt=nt.contained,bst=bst.contained,bsp=bsp.contained,
+             rpf=rpf.contained,rpt=rpt.contained,rbt=rbt.contained)
+  
+},simplify=F)
+
+
+apply(do.call("rbind",skewcov),2,mean)
+#all with dispersion of 2.5
+#0.0069 is the SE of the coverage
+#   nt   bst   bsp   rpf   rpt   rbt 
+#0.848 0.916 0.842 0.850 0.856 0.914
+
+```
+
